@@ -9,6 +9,7 @@ from tempfile import NamedTemporaryFile
 import shutil
 from mcrcon import MCRcon
 import time
+import random
 
 SERVER_IP = "localhost"
 SERVER_PORT = 25566
@@ -21,6 +22,9 @@ MINECRAFT_ITEM_COST_ID = "minecraft:diamond"
 MINECRAFT_ITEM_COST_PER_REROLL = 64
 REROLL_SHINY_BASH_SCRIPT = "./shiny_reroll.sh"
 SCREEN_NAME = "cobblemon-test"
+SHINY_LIST_PATH = "shiny_list.txt"
+
+random.seed(time.time())
 
 party_pokemon_file_path = os.path.join(SERVER_PATH, WORLD_NAME, "pokemon/playerpartystore")
 
@@ -130,8 +134,15 @@ def reroll_shiny(player_name, party_slot):
     if (total_available < total_cost):
         return(1, f"Broke! {player_name} does not have enough diamonds to reroll their {pokemon_name}. ({total_available} / {total_cost})")
 
-    # reroll the pokemon with the bash script
-    os.system(f"{REROLL_SHINY_BASH_SCRIPT} {player_name} {party_slot+1}")
+    # reroll the pokemon
+    with open(SHINY_LIST_PATH, 'r') as shiny_file:
+        shinies = shiny_file.readlines()
+        num_shinies = len(shinies)
+        choice = random.randrange(0, num_shinies)
+        chosen_pokemon_name = shinies[choice].strip("\n")
+
+    mcr.command(f"pokeeditother {player_name} {party_slot+1} {chosen_pokemon_name}")
+    mcr.command(f"say {player_name}'s shiny {pokemon_name} was rerolled into a {chosen_pokemon_name} for {total_cost} diamonds!")
 
     # remove the diamonds
     mcr.command(f"clear {player_name} {MINECRAFT_ITEM_COST_ID} {total_cost}")
@@ -161,7 +172,7 @@ def reroll_shiny(player_name, party_slot):
 
     mcr.disconnect()
 
-    return(0, f"Rerolled {player_name}'s {pokemon_name} for {total_cost} diamonds!")
+    return(0, f"Rerolled {player_name}'s shiny {pokemon_name} into a {chosen_pokemon_name} for {total_cost} diamonds!")
 
 # for cmd usage
 # args = sys.argv
