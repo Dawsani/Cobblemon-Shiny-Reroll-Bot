@@ -1,4 +1,5 @@
 import nbtlib
+from nbtlib.tag import Int
 from mcstatus import JavaServer
 import sys
 import numpy as np
@@ -6,15 +7,18 @@ import csv
 import os
 from tempfile import NamedTemporaryFile
 import shutil
+from mcrcon import MCRcon
 
-SERVER_IP = "localhost"
-PARTY_POKEMON_FILE_PATH = "/srv/minecraft/cobblemon/world/pokemon/playerpartystore"
-# inside the pokemon file path there is a directory for each 2 letters of uuids
+SERVER_IP = "localhost:25566"
+SERVER_PATH = "/srv/minecraft/cobblemon-test-server"
+WORLD_NAME = "test-world"
 REROLL_HISTORY_FILE_PATH = "shiny-reroll-history.csv"
-WORLD_FILE_PATH = "/srv/minecraft/cobblemon/world"
 MINECRAFT_ITEM_COST_ID = "minecraft:diamond"
 MINECRAFT_ITEM_COST_PER_REROLL = 64
-REROLL_SHINY_BASH_SCRIPT = "./srv/minecraft/cobblemon/scripts/shiny_reroll.sh"
+REROLL_SHINY_BASH_SCRIPT = "./shiny_reroll.sh"
+SCREEN_NAME = "cobblemon-test"
+
+party_pokemon_file_path = os.path.join(SERVER_PATH, WORLD_NAME, "pokemon/playerpartystore")
 
 args = sys.argv
 if len(args) != 3:
@@ -47,10 +51,9 @@ def getPlayerUUID(server, player_name):
     return None
 
 
-
-
 # check if server is online
 server = JavaServer.lookup(SERVER_IP)
+# TODO: Check if server is actually online
 
 # get uuid of player
 player_uuid = getPlayerUUID(server, player_name)
@@ -62,7 +65,7 @@ if player_uuid is None:
 # get the id of their pokemon
 # get the name of that pokemon for printing
 uuid_prefix = player_uuid[:2]
-party_full_path = PARTY_POKEMON_FILE_PATH + '/' + uuid_prefix + "/" + player_uuid + ".dat"
+party_full_path = os.path.join(party_pokemon_file_path, uuid_prefix, player_uuid + ".dat")
 nbt_file = nbtlib.load(party_full_path)
 
 pokemon_id = nbt_file[f"Slot{party_slot}"]["UUID"]
@@ -90,7 +93,7 @@ if is_shiny is False:
 
 # see how many times this pokemon has been rolled
 # file will have the following columns:
-# id, original trainer, times rerolled, original form, form 2, form 3... etc.
+# id, original trainer id, times rerolled, original form, form 2, form 3... etc.
 times_rerolled = 0
 with open(REROLL_HISTORY_FILE_PATH, newline='') as reroll_history_file:
     reader = csv.reader(reroll_history_file, delimiter=',', quotechar='\"')
@@ -99,14 +102,14 @@ with open(REROLL_HISTORY_FILE_PATH, newline='') as reroll_history_file:
         row_pokemon_id = row[0]
         if row_pokemon_id == pokemon_hex_id:
             # match found
-            times_rerolled = row[2]
+            times_rerolled = int(row[2])
             break
 
 # calculate how many diamonds the reroll would cost
 diamond_cost = times_rerolled * 64
 
 # check if the player has the required diamonds
-player_file = os.path.join(WORLD_FILE_PATH, "playerdata", f"{player_uuid}.dat")
+player_file = os.path.join(SERVER_PATH, WORLD_NAME, "playerdata", f"{player_uuid}.dat")
 player_data = nbtlib.load(player_file)
 
 if 'Inventory' not in player_data:
@@ -116,8 +119,10 @@ if 'Inventory' not in player_data:
 total_available = 0
 diamond_slots = []
 for item in player_data['Inventory']:
+    if 'id' not in item:
+        continue
     if item['id'] == MINECRAFT_ITEM_COST_ID:
-        total_available += item['Count']
+        total_available += item['count']
         diamond_slots.append(item)
 
 total_cost = ( times_rerolled + 1 ) * MINECRAFT_ITEM_COST_PER_REROLL
@@ -131,13 +136,14 @@ os.system(f"{REROLL_SHINY_BASH_SCRIPT} {player_name} {party_slot+1}")
 # remove the diamonds
 remaining_cost = total_cost
 for item in diamond_slots:
-    if total_cost <= 0:
+    if remaining_cost <= 0:
         break
 
     diamonds_in_slot = item['count']
     remove = min(diamonds_in_slot, remaining_cost)
     remaining_cost -= remove
-    item['count'] -= remove
+    player_data['Inventory'][item['Slot']]['count'] = nbtlib.Int(item['count'] - remove)
+    #print(f"Removed {remove} diamonds from the inventory, player now has {item['count']} in that slot.")
 
 player_data.save()
 
@@ -146,15 +152,20 @@ tempfile = NamedTemporaryFile("w+t", newline='', delete=False)
 with open(REROLL_HISTORY_FILE_PATH, newline='') as reroll_history_file:
     reader = csv.reader(reroll_history_file, delimiter=',', quotechar='"')
     writer = csv.writer(tempfile, delimiter=',', quotechar='"')
+
     for row in reader:
         # see if it matches the id
         row_pokemon_id = row[0]
         if row_pokemon_id == pokemon_hex_id:
             # increment the number of times it's been rerolled
-            row[2] += 1
+            row[2] = int(row[2]) + 1
             # add this new pokemon to the pokemon it's been
             row.append(pokemon_name)
         writer.writerow(row)
+
+    if (times_rerolled == 0):
+        writer.writerow([pokemon_hex_id, player_uuid, 1, pokemon_name])
+
 shutil.move(tempfile.name, REROLL_HISTORY_FILE_PATH)
 
 

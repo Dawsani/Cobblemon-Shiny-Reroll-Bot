@@ -11,7 +11,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": "dawsani 6"
+            "args": "dawsani 1"
         }
     ]
 }
