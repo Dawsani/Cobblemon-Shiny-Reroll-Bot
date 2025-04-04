@@ -8,7 +8,7 @@ import os
 from tempfile import NamedTemporaryFile
 import shutil
 from mcrcon import MCRcon
-import dotenv
+import time
 
 SERVER_IP = "localhost"
 SERVER_PORT = 25566
@@ -41,7 +41,7 @@ def getPlayerUUID(server, player_name):
 def reroll_shiny(player_name, party_slot):
 
     if party_slot < 0 or party_slot > 5:
-        return (f"Erm... there is no slot {party_slot+1} in Cobblemon... Party slot must be between 1 and 6.")
+        return (1, f"Erm... there is no slot {party_slot+1} in Cobblemon... Party slot must be between 1 and 6.")
 
     # check if server is online
     server = JavaServer.lookup(f"{SERVER_IP}:{SERVER_PORT}")
@@ -49,14 +49,10 @@ def reroll_shiny(player_name, party_slot):
     try:
         mcr.connect()
     except:
-        return(f"Sorry, I can't connect to the server through RCON right now. Tell @dawsani he's dumb and messed something up.")
+        return(1, f"Sorry, I can't connect to the server through RCON right now. Tell @dawsani he's dumb and messed something up.")
 
 
-    response = mcr.command("save-all")
-    if ("Saved the game" in response):
-        print(f"Saved the game.")
-    else:
-        return(f"Error saving the world data.")
+    mcr.command("save-all flush")
         
 
     # TODO: Check if server is actually online
@@ -64,7 +60,7 @@ def reroll_shiny(player_name, party_slot):
     # get uuid of player
     player_uuid = getPlayerUUID(server, player_name)
     if player_uuid is None:
-        return(f"Player {player_name} is offline.")
+        return(1, f"Player {player_name} is offline.")
 
     # make sure the pokemon is shiny
     # get the id of their pokemon
@@ -76,7 +72,7 @@ def reroll_shiny(player_name, party_slot):
     # check if player has a pokemon in that slot
     slot_key = f"Slot{party_slot}"
     if slot_key not in nbt_file:
-        return f"{player_name} doesn't have a pokemon in slot {party_slot+1}"
+        return(1, f"{player_name} doesn't have a pokemon in slot {party_slot+1}")
     
     pokemon_id = nbt_file[slot_key]["UUID"]
     is_shiny = nbt_file[slot_key]["Shiny"]
@@ -97,7 +93,7 @@ def reroll_shiny(player_name, party_slot):
         is_shiny = False
 
     if is_shiny is False:
-        return(f"{player_name}'s {pokemon_name} in slot {party_slot+1} is not shiny and cannot be rerolled.")
+        return(1, f"{player_name}'s {pokemon_name} in slot {party_slot+1} is not shiny and cannot be rerolled.")
 
     # see how many times this pokemon has been rolled
     # file will have the following columns:
@@ -132,7 +128,7 @@ def reroll_shiny(player_name, party_slot):
 
     total_cost = ( times_rerolled + 1 ) * MINECRAFT_ITEM_COST_PER_REROLL
     if (total_available < total_cost):
-        return(f"Broke! {player_name} does not have enough diamonds to reroll their {pokemon_name}. ({total_available} / {total_cost})")
+        return(1, f"Broke! {player_name} does not have enough diamonds to reroll their {pokemon_name}. ({total_available} / {total_cost})")
 
     # reroll the pokemon with the bash script
     os.system(f"{REROLL_SHINY_BASH_SCRIPT} {player_name} {party_slot+1}")
@@ -140,11 +136,7 @@ def reroll_shiny(player_name, party_slot):
     # remove the diamonds
     mcr.command(f"clear {player_name} {MINECRAFT_ITEM_COST_ID} {total_cost}")
 
-    response = mcr.command("save-all")
-    if ("Saved the game" in response):
-        print(f"Saved the game.")
-    else:
-        return(f"Saving failed. Exiting...")
+    mcr.command("save-all flush")
 
     # add the reroll to the records
     tempfile = NamedTemporaryFile("w+t", newline='', delete=False)
@@ -169,7 +161,7 @@ def reroll_shiny(player_name, party_slot):
 
     mcr.disconnect()
 
-    return(f"Rerolled {player_name}'s {pokemon_name} for {total_cost} diamonds!")
+    return(0, f"Rerolled {player_name}'s {pokemon_name} for {total_cost} diamonds!")
 
 # for cmd usage
 # args = sys.argv
