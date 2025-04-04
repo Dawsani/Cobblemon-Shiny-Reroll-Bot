@@ -9,7 +9,10 @@ from tempfile import NamedTemporaryFile
 import shutil
 from mcrcon import MCRcon
 
-SERVER_IP = "localhost:25566"
+SERVER_IP = "localhost"
+SERVER_PORT = 25566
+RCON_PORT = 25576
+RCON_PASSWORD = "boss"
 SERVER_PATH = "/srv/minecraft/cobblemon-test-server"
 WORLD_NAME = "test-world"
 REROLL_HISTORY_FILE_PATH = "shiny-reroll-history.csv"
@@ -44,6 +47,9 @@ def getPlayerUUID(server, player_name):
     status = server.status()
     players = status.players.sample
 
+    if players == None:
+        return None
+
     for player in players:
         if (player.name).lower() == player_name.lower():
             return player.id
@@ -52,7 +58,17 @@ def getPlayerUUID(server, player_name):
 
 
 # check if server is online
-server = JavaServer.lookup(SERVER_IP)
+server = JavaServer.lookup(f"{SERVER_IP}:{SERVER_PORT}")
+mcr = MCRcon(SERVER_IP, RCON_PASSWORD, RCON_PORT)
+mcr.connect()
+
+response = mcr.command("save-all")
+if ("Saved the game" in response):
+    print(f"Saved the game.")
+else:
+    print(f"Saving failed. Exiting...")
+    exit(1)
+
 # TODO: Check if server is actually online
 
 # get uuid of player
@@ -134,18 +150,14 @@ if (total_available < total_cost):
 os.system(f"{REROLL_SHINY_BASH_SCRIPT} {player_name} {party_slot+1}")
 
 # remove the diamonds
-remaining_cost = total_cost
-for item in diamond_slots:
-    if remaining_cost <= 0:
-        break
+mcr.command(f"clear {player_name} {MINECRAFT_ITEM_COST_ID} {total_cost}")
 
-    diamonds_in_slot = item['count']
-    remove = min(diamonds_in_slot, remaining_cost)
-    remaining_cost -= remove
-    player_data['Inventory'][item['Slot']]['count'] = nbtlib.Int(item['count'] - remove)
-    #print(f"Removed {remove} diamonds from the inventory, player now has {item['count']} in that slot.")
-
-player_data.save()
+response = mcr.command("save-all")
+if ("Saved the game" in response):
+    print(f"Saved the game.")
+else:
+    print(f"Saving failed. Exiting...")
+    exit(1)
 
 # add the reroll to the records
 tempfile = NamedTemporaryFile("w+t", newline='', delete=False)
@@ -170,3 +182,5 @@ shutil.move(tempfile.name, REROLL_HISTORY_FILE_PATH)
 
 
 print(f"Rerolled {player_name}'s {pokemon_name}.")
+
+mcr.disconnect()
