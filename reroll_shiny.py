@@ -10,19 +10,21 @@ import shutil
 from mcrcon import MCRcon
 import time
 import random
+from dotenv import load_dotenv
 
 SERVER_IP = "localhost"
-SERVER_PORT = 25566
-RCON_PORT = 25576
-RCON_PASSWORD = "boss"
-SERVER_PATH = "/srv/minecraft/cobblemon-test-server"
-WORLD_NAME = "test-world"
+SERVER_PORT = 25565
+RCON_PORT = 25575
+SERVER_PATH = "/srv/minecraft/cobblemon"
+WORLD_NAME = "world"
 REROLL_HISTORY_FILE_PATH = "shiny-reroll-history.csv"
 MINECRAFT_ITEM_COST_ID = "minecraft:diamond"
 MINECRAFT_ITEM_COST_PER_REROLL = 64
 REROLL_SHINY_BASH_SCRIPT = "./shiny_reroll.sh"
-SCREEN_NAME = "cobblemon-test"
+SCREEN_NAME = "cobblemon"
 SHINY_LIST_PATH = "shiny_list.txt"
+load_dotenv()
+RCON_PASSWORD = os.getenv('RCON_PASSWORD')
 
 random.seed(time.time())
 
